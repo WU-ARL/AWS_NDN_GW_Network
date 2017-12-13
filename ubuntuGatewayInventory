@@ -1,0 +1,17 @@
+[ndngateways]
+
+# Everything defined in host_vars/{name}, e.g. host_vars/WU contains all variables for node WU
+UBUNTU_GW1
+UBUNTU_GW2
+
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/aws_wu_jdd.pem
+ndnNetwork=/ndn
+hyperbolic_state=on
+tcp_port=6363
+udp_port=6363
+multicast_port=56363
+supports_guest_certs=False
+nlsr_cert_root=UBUNTU_GW1
+testbed_cert_root=UBUNTU_GW1

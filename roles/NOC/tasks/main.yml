@@ -1,0 +1,64 @@
+---
+# tasks file for NOC
+- debug:
+    msg: "OS: {{ ansible_distribution }} major version: {{ ansible_distribution_major_version }} full version: {{ ansible_distribution_version }}"
+
+- name: create NOC bin directory
+  file: path=/etc/NOC/bin state=directory owner=root group=root mode=0755
+
+- name: copy rotateLogs.sh to NOC/bin
+  copy: dest=/etc/NOC/bin/rotateLogs.sh  src=roles/NOC/files/rotateLogs.sh owner=root group=root mode=0755
+
+- name: copy purge_kernelImages.sh to NOC/bin
+  copy: dest=/etc/NOC/bin/purge_kernelImages.sh  src=roles/NOC/files/purge_kernelImages.sh owner=root group=root mode=0755
+
+- name: copy check_fail2ban_log.sh to NOC/bin
+  copy: dest=/etc/NOC/bin/check_fail2ban_log.sh  src=roles/NOC/files/check_fail2ban_log.sh owner=root group=root mode=0755
+
+- name: add ndn repository
+  apt_repository: repo='ppa:named-data/ppa' state=present
+  when: ansible_distribution == "Ubuntu" 
+
+- name: add Ashlesh experimental ndn repository
+  apt_repository: repo='ppa:agawande/named-data-exp' state=present
+  when: ansible_distribution == "Ubuntu" 
+
+- name: install general ubuntu packages 
+  when: ansible_distribution == "Ubuntu" 
+  action: >
+       {{ ansible_pkg_mgr }} name={{ item }} state=latest update_cache=yes
+  with_items:
+       - build-essential
+       - git
+       - openssl 
+       - python-openssl 
+       - libssl-dev 
+       - expat 
+       - libexpat-dev 
+       - libpcap-dev
+       - gawk 
+       - texinfo 
+       - asciidoc 
+       - finger
+       - python-software-properties
+       - software-properties-common
+       - ntp
+       - autoconf 
+       - libtool
+       - python-dev
+       - g++ 
+       - autotools-dev 
+       - libicu-dev 
+       - libbz2-dev  
+       - sqlite3
+       - pkg-config
+       - libssl-dev 
+       - libsqlite3-dev 
+       - libcrypto++-dev
+       - aptitude
+       - python3-dev
+       - python3-setuptools
+       - python3-pip
+       - fail2ban
+       - liblog4cxx10*
+

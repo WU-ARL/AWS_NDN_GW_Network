@@ -1,0 +1,58 @@
+---
+# tasks file for nfd
+- name: add ndn user
+  user: name=ndn state=present shell=/bin/false createhome=no
+
+- name: make ndn required directories
+  file: path=/etc/ndn state=directory owner=ndn group=ndn mode=0755
+- file: path=/etc/ndn/keys state=directory owner=ndn group=ndn mode=0755
+- file: path=/var/lib/ndn state=directory owner=ndn group=ndn mode=0755
+- file: path=/var/log/ndn state=directory owner=ndn group=ndn mode=0755
+
+- name: set up rsyslog for nfd.log for Ubuntu 16.04
+  copy: dest=/etc/rsyslog.d/25-nfd.conf src=roles/nfd/files/rsyslogd.25-nfd.conf owner=root group=root mode=0644
+  when: (ansible_distribution == "Ubuntu" and ansible_distribution_major_version  == "16")
+
+- name: initialize nfd.log
+  file: path=/var/log/ndn/nfd.log state=touch owner=syslog group=adm mode=0644
+  when: (ansible_distribution == "Ubuntu" and ansible_distribution_major_version  == "16")
+
+- cron: name="log rotate" user="{{ansible_user}}" minute="28" job="/etc/NOC/bin/rotateLogs.sh  "
+
+- name: install nfd
+  apt: name=nfd state=latest update_cache=yes
+
+- name: install nfd-dbg
+  apt: name=nfd-dbg state=latest update_cache=yes
+
+# this maybe should go in ndnsec
+# generate Testbed root cert for identity {{ndnNetwork}} for user ndnsec with HOME=/home/ndnsec on {{testbed_cert_root}} if needed.
+- script: roles/nfd/files/root_key_gen.sh "{{ ndnNetwork }}"
+  when: inventory_hostname == "{{testbed_cert_root}}"
+
+# fetch root cert from {{testbed_cert_root}} if needed
+- fetch:
+    src: /home/ndnsec/root.cert
+    dest: roles/nfd/files/ndn-testbed-root.ndncert.base64
+    flat: yes
+  when: inventory_hostname == "{{testbed_cert_root}}"
+
+
+- name: copy root key
+  #copy: dest=/etc/ndn/keys/ansible_ndn-testbed-root.ndncert.base64 src=roles/nfd/files/ndn-testbed-root.ndncert.base64 owner=root group=root mode=0644
+  copy: dest=/etc/ndn/keys/ndn-testbed-root.ndncert.base64 src=roles/nfd/files/ndn-testbed-root.ndncert.base64 owner=root group=root mode=0644
+
+#- name: copy openmhealth key
+#  copy: dest=/etc/ndn/keys/openmhealth.cert src=roles/nfd/files/openmhealth.cert owner=root group=root mode=0644
+
+- name: create nfd-init.sh
+  template: src=nfd-init.sh.j2 dest=/etc/ndn/nfd-init.sh  owner=root group=root mode="u=rwx,g=rx,o=rx"
+  notify: restart nfd
+
+- name: create nfd.conf
+  template: src=nfd.conf.j2 dest=/etc/ndn/nfd.conf owner=root group=root mode="u=rw,g=r,o=r"
+  notify: restart nfd
+
+- name: start nfd
+  service: name=nfd state=started enabled=yes
+

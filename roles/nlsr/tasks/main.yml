@@ -1,0 +1,125 @@
+---
+# tasks file for nlsr
+- name: create nlsr user
+  user: name=nlsr state=present shell=/bin/bash createhome=yes home=/home/nlsr
+
+- name: create nlsr directories
+  file: path=/etc/ndn/nlsr/keys state=directory owner=nlsr group=nlsr mode=0755
+- file: path=/var/lib/ndn/nlsr state=directory owner=nlsr group=nlsr mode=0755
+- file: path=/var/log/ndn/nlsr state=directory owner=nlsr group=nlsr mode=0755
+
+- name: create nlsr.conf
+  #template: src=nlsr.conf.j2 dest=/etc/ndn/nlsr/ansible_nlsr.conf owner=nlsr group=nlsr mode="u=rw,g=r,o=r"
+  template: src=nlsr.conf.j2 dest=/etc/ndn/nlsr/nlsr.conf owner=nlsr group=nlsr mode="u=rw,g=r,o=r"
+  notify: restart nlsr
+
+#- debug:
+#    msg: "default_prefix: {{ default_prefix }}"
+
+# generate NLSR root cert for identity /ndn for user nlsr with HOME=/var/lib/ndn/nlsr on {{nlsr_cert_root}} if needed.
+- script: roles/nlsr/files/root_key_gen.sh "{{ ndnNetwork }}"
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+
+# fetch root cert from {{nlsr_cert_root}} if needed
+- fetch: 
+    src: /home/nlsr/root.cert
+    dest: roles/nlsr/files/root.cert
+    flat: yes
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+
+# copy NLSR root cert out to sites other than {{nlsr_cert_root}}
+- copy: src=roles/nlsr/files/root.cert dest=/etc/ndn/nlsr/keys/root.cert
+  #when: inventory_hostname != "{{nlsr_cert_root}}"
+
+# generate site and nlsr keys for user nlsr if needed
+- script: roles/nlsr/files/key_gen1.sh "{{ default_prefix }}" "{{ inventory_hostname }}"
+  #register: keygen1
+  ignore_errors: yes
+
+# fetch unsigned keys back to here
+- fetch: 
+    src: /home/nlsr/unsigned_site.cert
+    dest: roles/nlsr/files/ANSIBLE_{{ inventory_hostname }}_unsigned_site.cert
+    flat: yes
+
+- fetch: 
+    src: /home/nlsr/approval.info
+    dest: roles/nlsr/files/ANSIBLE_{{ inventory_hostname }}_approval.info
+    flat: yes
+
+# copy unsigned keys to {{nlsr_cert_root}} for approval
+- copy: src={{ item }} dest=/home/nlsr/ owner=nlsr group=nlsr mode=644
+  with_fileglob:
+    - roles/nlsr/files/*_unsigned_site.cert
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+
+# copy approval info (NAME and PREFIX) to {{nlsr_cert_root}} for use in approval process
+- copy: src={{ item }} dest=/home/nlsr/ owner=nlsr group=nlsr mode=644
+  with_fileglob:
+    - roles/nlsr/files/*_approval.info
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+
+# approve any unsigned keys
+- script: roles/nlsr/files/key_approval.sh 
+  #register: root_approved
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+  ignore_errors: yes
+
+# get the names of approved site certs
+- name: get filenames of approved site certs
+  shell: cd /home/nlsr/ ; ls -1 ANSIBLE_*_site.cert | grep -v unsigned
+  register: approved_sites
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+
+- debug:
+    msg: "approved_sites.stdout_lines: {{ approved_sites.stdout_lines }}"
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+
+- debug: 
+    msg: "approved_sites.stdout_lines: {{ item }}"
+  with_items: "{{ approved_sites.stdout_lines }}"
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+  ignore_errors: yes
+
+# fetch approved site certs
+- fetch: src=/home/nlsr/{{ item }} dest=roles/nlsr/files/  flat=yes
+  #with_items: "{{ (inventory_hostname == '{{nlsr_cert_root}}') | ternary(approved_sites.stdout_lines, '') }}"
+  with_items: "{{ approved_sites.stdout_lines }}"
+  when: inventory_hostname == "{{nlsr_cert_root}}"
+  ignore_errors: yes
+
+- name: check if <NAME>_site.cert exists
+  local_action: stat path=roles/nlsr/files/ANSIBLE_{{inventory_hostname}}_site.cert
+  #become_user: jdd
+  become: false
+  register: stat_result
+
+# copy approved site certs to sites
+- copy: src=roles/nlsr/files/ANSIBLE_{{inventory_hostname}}_site.cert dest=/etc/ndn/nlsr/keys/site.cert
+  when: stat_result|success
+  ignore_errors: yes
+
+# clean up the approval info files, getting rid of any for which we have approved site certs
+- local_action: command roles/nlsr/files/clean_approval_info.sh \"{{ role_path }}\"
+  #become_user: jdd
+  become: false
+
+- debug:
+    msg: "about to do key_gen2.sh {{default_prefix}} ndnops {{inventory_hostname}} {{router_name}}"
+
+# finish generating keys and certs for user nlsr
+- script: roles/nlsr/files/key_gen2.sh "{{default_prefix}}" "ndnops"  "{{inventory_hostname}}" "{{router_name}}"
+  #register: keygen2
+  ignore_errors: yes
+
+
+- name: create log4cxx.conf
+  copy: dest=/etc/ndn/nlsr/log4cxx.conf src=roles/nlsr/files/log4cxx.conf owner=root group=root mode=0644
+  notify: restart nlsr
+
+- name: install nlsr
+  apt: name=nlsr state=latest update_cache=yes
+
+- name: start nlsr
+  service: name=nlsr state=started enabled=yes
+

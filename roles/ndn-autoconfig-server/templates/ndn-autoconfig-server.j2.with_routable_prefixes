@@ -1,0 +1,21 @@
+# ndn-autoconfig-server defaults
+
+# FaceURI of NDN hub announced to hosts
+FACE_URI="udp4://{{ansible_host}}"
+#ROUTABLE_PREFIXES="-p {{routable_prefixes}}"
+{% if routable_prefixes is defined %}
+ROUTABLE_PREFIXES="{% for prefix in routable_prefixes -%}
+-p {{ prefix }} {{' '}}
+{%- endfor %}"
+#
+#BLACKLIST="{% for neighbor, data in neighbors.items() -%}
+#{% if hostvars[neighbor].ansible_host | ipv4 -%}
+#-b {{ hostvars[neighbor].ansible_host }}/32 {{' '}}
+#{%- else -%}
+#-b {{ lookup('dig',  hostvars[neighbor].ansible_host) }}/32 {{' '}}
+#{%- endif %}
+#{%- endfor %}"
+#
+{% else %}
+ROUTABLE_PREFIXES="-p {{default_prefix}}"
+{% endif%}

@@ -1,0 +1,19 @@
+---
+
+# file: host_vars/UBUNTU_GW1
+ansible_host: 52.90.155.14
+ethernet_device: eth0
+site: /aws/gw1
+default_prefix: /ndn/aws/gw1 
+advertised_prefixes: [/ndn/aws/gw1]
+routable_prefixes: [/ndn/aws/gw1]
+router_name: wu_aws1
+neighbors: 
+  UBUNTU_GW2: {link_cost: 1}
+network_regions: [/ndn/aws/gw1]
+hr_radius: 19.426851
+hr_angle: 4.31067181
+# certificate related variables
+# default name is same as default_prefix
+#cert_url: 
+supports_guest_certs: False
